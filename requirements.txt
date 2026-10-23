@@ -1,0 +1,5 @@
+strands-agents
+requests
+fastapi
+uvicorn
+boto3

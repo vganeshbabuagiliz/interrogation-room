@@ -1,0 +1,3 @@
+# Only for running Decider on your own machine: strands-decider serve ...
+-r requirements.txt
+strands-decider

@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.log
+files.zip
+.env
+.claude/
+srv_run.log
