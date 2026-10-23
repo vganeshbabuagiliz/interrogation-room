@@ -4,7 +4,7 @@
 #
 # Instance: t3.small (or t3.medium), Amazon Linux 2023, 20 GB disk.
 # Instance role: allow bedrock:InvokeModel and bedrock:InvokeModelWithResponseStream on the models below.
-# Security group: TCP 8000 from your IP while testing. To let judges try it, open it to the world ONLY with ACCESS_CODE
+# Security group: TCP 80 from your IP while testing. To let judges try it, open it to the world ONLY with ACCESS_CODE
 # set (the app then asks for it and limits turns per visitor and per day).
 #
 # Fill in the four values in the CONFIG block, then paste this script as user data (or run it by hand).
@@ -46,7 +46,8 @@ After=network-online.target
 [Service]
 User=ec2-user
 WorkingDirectory=/home/ec2-user/interrogation-room
-Environment=HOST=0.0.0.0 PORT=8000 PYTHONIOENCODING=utf-8
+Environment=HOST=0.0.0.0 PORT=80 PYTHONIOENCODING=utf-8
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 ExecStart=/home/ec2-user/interrogation-room/.venv/bin/python server.py
 Restart=on-failure
 
@@ -55,4 +56,4 @@ WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
 systemctl enable --now interrogation-room
-# Check:  curl localhost:8000/api/state   |   logs: journalctl -u interrogation-room -f
+# Check:  curl localhost/api/state   |   logs: journalctl -u interrogation-room -f
