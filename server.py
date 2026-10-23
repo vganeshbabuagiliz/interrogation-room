@@ -11,6 +11,7 @@ Sharing it publicly (all optional, set in .env or the environment):
 Each visitor gets their own game (cookie `sid`), so suspects' memories do not mix.
 """
 import base64
+import hashlib
 import hmac
 import json
 import os
@@ -21,8 +22,10 @@ import time
 from collections import OrderedDict, defaultdict, deque
 
 import uvicorn
+from urllib.parse import parse_qs
+
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 import decider_client  # noqa: F401  (loads .env before the settings below are read)
@@ -77,30 +80,61 @@ def _allowed(sid: str) -> str | None:
     return None
 
 
+def _token() -> str:
+    return hmac.new(ACCESS_CODE.encode(), b"interrogation-room-login", hashlib.sha256).hexdigest()
+
+
+LOGIN_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Interrogation Room: access code</title><style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0e1013;color:#e9e7e2;font:15px/1.5 system-ui,sans-serif}
+form{width:min(360px,88vw);padding:28px;background:#15181d;border:1px solid #2a2f37;border-radius:12px}
+h1{margin:0 0 4px;font:700 22px Georgia,serif}p{margin:0 0 16px;color:#8e949e;font-size:13px}
+input{width:100%;box-sizing:border-box;height:42px;padding:0 12px;border-radius:8px;border:1px solid #2a2f37;background:#1c2026;color:inherit;font:inherit}
+input:focus{outline:1px solid #e0a63a;border-color:#e0a63a}
+button{margin-top:12px;width:100%;height:42px;border:0;border-radius:8px;background:#e0a63a;color:#14161a;font-weight:700;font-size:15px;cursor:pointer}
+.err{color:#e5584b;font-size:13px;margin:10px 0 0}
+</style></head><body><form method="post" action="/login"><h1>Interrogation Room</h1>
+<p>Enter the access code from the submission notes to start the demo.</p>
+<input name="code" type="password" placeholder="Access code" autocomplete="off" autofocus required>
+<button>Enter</button>__ERR__</form></body></html>"""
+
+
 def _json_line(payload: dict, status: int) -> Response:
     return Response(json.dumps(payload) + "\n", status_code=status, media_type="application/x-ndjson")
 
 
 @app.middleware("http")
 async def guard(request: Request, call_next):
-    if ACCESS_CODE:
-        ok = False
+    if ACCESS_CODE and request.url.path != "/login":
+        ok = hmac.compare_digest(request.cookies.get("ac", ""), _token())
         header = request.headers.get("authorization", "")
-        if header.lower().startswith("basic "):
+        if not ok and header.lower().startswith("basic "):
             try:
                 given = base64.b64decode(header[6:]).decode().partition(":")[2]
                 ok = hmac.compare_digest(given, ACCESS_CODE)
             except Exception:
                 ok = False
         if not ok:
-            return Response("Access code required", status_code=401,
-                            headers={"WWW-Authenticate": 'Basic realm="Interrogation Room (enter the access code as the password)"'})
+            if request.method == "GET" and request.url.path == "/":
+                return HTMLResponse(LOGIN_PAGE.replace("__ERR__", ""), status_code=401)
+            return Response(json.dumps({"error": "Access code required. Reload the page and enter it."}) + "\n",
+                            status_code=401, media_type="application/x-ndjson")
     sid = request.cookies.get("sid") or secrets.token_urlsafe(16)
     request.state.sid = sid
     response = await call_next(request)
     if request.cookies.get("sid") != sid:
         response.set_cookie("sid", sid, httponly=True, samesite="lax", max_age=7 * 86400)
     return response
+
+
+@app.post("/login")
+async def login(request: Request):
+    code = parse_qs((await request.body()).decode()).get("code", [""])[0].strip()
+    if ACCESS_CODE and hmac.compare_digest(code, ACCESS_CODE):
+        resp = RedirectResponse("/", status_code=303)
+        resp.set_cookie("ac", _token(), httponly=True, samesite="lax", max_age=7 * 86400)
+        return resp
+    return HTMLResponse(LOGIN_PAGE.replace("__ERR__", '<div class="err">That code is not right.</div>'), status_code=401)
 
 
 @app.get("/")
