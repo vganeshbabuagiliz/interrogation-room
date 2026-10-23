@@ -106,6 +106,7 @@ To run Decider yourself instead: `pip install -r requirements-local.txt`,
 No keys or AWS account yet? `MOCK=1 python server.py` runs the whole UI with keyword heuristics standing in
 for Decider and canned suspect lines. Mock mode is labelled in the UI and `bench.py` refuses to run in it.
 
+Sharing a public demo: set `ACCESS_CODE` (and optionally the turn limits) in `.env`; see DEPLOY.md.
 Deploying on AWS: see [DEPLOY.md](DEPLOY.md) (`deploy/ec2-userdata.sh`). Before publishing, run
 `python secret_scan.py`.
 

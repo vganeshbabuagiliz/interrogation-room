@@ -81,7 +81,11 @@ class Decider:
             payload["questions"][name] = spec
 
         t0 = time.perf_counter()
-        resp = requests.post(self.url, json=payload, headers=self.headers, timeout=self.timeout)
+        for attempt in range(4):           # the hosted key is shared: back off briefly on 429 / 503
+            resp = requests.post(self.url, json=payload, headers=self.headers, timeout=self.timeout)
+            if resp.status_code not in (429, 503) or attempt == 3:
+                break
+            time.sleep(4 * (attempt + 1))
         if resp.status_code in (401, 402, 429, 503):
             hint = {401: "check DECIDER_API_KEY", 402: "monthly quota used up",
                     429: "rate limited; retry shortly", 503: "server busy; retry"}[resp.status_code]
